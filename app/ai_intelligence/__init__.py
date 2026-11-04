@@ -1,0 +1,1 @@
+"""Optional, on-demand interpretation of existing purchase truth."""

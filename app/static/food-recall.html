@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Purchase Intelligence — Food you purchased</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      __NAV__
+      <main id="main-content" class="app-main">
+      <header class="page-heading"><div>
+        <p class="eyebrow">Visual recall · Walmart food</p>
+        <h1>Food you purchased</h1>
+        <p class="lede">Images and text help recall past eligible purchases. Purchased does not mean still in the household. A pictured item is not evidence that it is currently available.</p>
+      </div></header>
+      <nav class="filters" aria-label="Food recall filters">
+        <a href="/food-recall">All Walmart food</a>
+        <a href="/food-recall?view=exact">Exact image</a>
+        <a href="/food-recall?view=representative">Representative image</a>
+        <a href="/food-recall?view=none">No image</a>
+      </nav>
+      <div id="recall-status" class="result" role="status" aria-live="polite"></div>
+      <section id="recall-list" class="pattern-list"></section>
+      </main>
+    </div>
+    <script src="/static/food-recall.js"></script>
+  </body>
+</html>

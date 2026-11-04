@@ -1,0 +1,255 @@
+.ask-wrap {
+  width: auto;
+}
+
+.ask-panel {
+  margin-top: 22px;
+}
+
+.ask-panel h2 {
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+}
+
+.ask-panel textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.ask-panel textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.ask-input-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.ask-input-meta .hint {
+  margin: 8px 0 0;
+}
+
+.character-count {
+  flex: 0 0 auto;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.starter-block {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.starter-label {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.starter-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ask-panel button.starter-button {
+  margin: 0;
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  background: var(--card-muted);
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.ask-panel button.starter-button:hover {
+  border-color: var(--accent);
+  background: var(--ok-bg);
+}
+
+.ask-panel button:focus-visible,
+.starter-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.ask-caveat {
+  margin: 14px 4px 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.ask-result {
+  margin-top: 24px;
+}
+
+.ask-status {
+  margin: 0 0 14px;
+}
+
+.ask-status:empty {
+  display: none;
+}
+
+.ask-status[data-state="pending"] {
+  background: var(--pending-bg);
+  border: 1px solid var(--line);
+}
+
+.ask-status[data-state="error"],
+.ask-status[data-state="rejected"] {
+  background: var(--danger-bg);
+  border: 1px solid #efd0cc;
+  color: var(--danger);
+}
+
+.answer-panel {
+  margin-top: 14px;
+}
+
+.answer-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.answer-heading .eyebrow {
+  margin-bottom: 7px;
+}
+
+.answer-heading h2 {
+  font-size: 1.6rem;
+}
+
+.answer-state {
+  flex: 0 0 auto;
+  border: 1px solid var(--ok-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--ok-bg);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.answer-text {
+  margin: 18px 0 0;
+  font-size: 1.08rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.answer-provenance {
+  grid-template-columns: 10rem 1fr;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  font-size: 0.92rem;
+}
+
+.facts-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.facts-section h3 {
+  margin: 0;
+  font-family: Georgia, "Palatino Linotype", Palatino, serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.supporting-facts {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.supporting-facts li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+
+.fact-kind {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fact-id {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.fact-text {
+  display: block;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .ask-wrap {
+    width: 100%;
+  }
+
+  .ask-input-meta {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .starter-questions {
+    display: grid;
+  }
+
+  .ask-panel button.starter-button {
+    width: 100%;
+  }
+
+  .answer-heading {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .answer-provenance {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .answer-provenance dd {
+    margin-bottom: 8px;
+  }
+}

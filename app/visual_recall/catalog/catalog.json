@@ -1,0 +1,30 @@
+{
+  "exact": [],
+  "representative": [
+    {
+      "tokens": ["milk"],
+      "file": "representative/milk.svg",
+      "source": "Purchase Intelligence original illustration"
+    },
+    {
+      "tokens": ["banana", "bananas"],
+      "file": "representative/banana.svg",
+      "source": "Purchase Intelligence original illustration"
+    },
+    {
+      "tokens": ["bread"],
+      "file": "representative/bread.svg",
+      "source": "Purchase Intelligence original illustration"
+    },
+    {
+      "tokens": ["egg", "eggs"],
+      "file": "representative/egg.svg",
+      "source": "Purchase Intelligence original illustration"
+    },
+    {
+      "tokens": ["apple", "apples"],
+      "file": "representative/apple.svg",
+      "source": "Purchase Intelligence original illustration"
+    }
+  ]
+}

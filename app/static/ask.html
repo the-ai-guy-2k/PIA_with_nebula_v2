@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Purchase Intelligence — Ask about purchases</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/ask.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      __NAV__
+      <main id="main-content" class="app-main ask-wrap">
+      <header class="page-heading"><div>
+        <p class="eyebrow">Grounded in your records</p>
+        <h1>Ask your purchase history</h1>
+        <p class="lede">Recall what appears in confirmed purchases. Answers are grounded in remembered evidence—not a live view of what is in your home.</p>
+      </div></header>
+
+      <section class="panel ask-panel" aria-labelledby="question-heading">
+        <h2 id="question-heading">What are you trying to remember?</h2>
+        <form id="ask-form">
+          <label for="question">Your question</label>
+          <textarea id="question" name="question" rows="3" maxlength="500" required
+            aria-describedby="question-help question-count" placeholder="For example, what did I buy recently?"></textarea>
+          <div class="ask-input-meta">
+            <p id="question-help" class="hint">Up to 500 characters. Your question is sent only when you choose Ask.</p>
+            <p id="question-count" class="character-count" aria-live="polite">0 / 500</p>
+          </div>
+          <button id="ask-button" type="submit">Ask</button>
+        </form>
+
+        <div class="starter-block">
+          <p class="starter-label">Try asking</p>
+          <div class="starter-questions" aria-label="Starter questions">
+            <button class="starter-button" type="button" data-question="What did I buy recently?">What did I buy recently?</button>
+            <button class="starter-button" type="button" data-question="What food did I buy recently?">What food did I buy recently?</button>
+            <button class="starter-button" type="button" data-question="What do I buy often?">What do I buy often?</button>
+            <button class="starter-button" type="button" data-question="What patterns are showing up?">What patterns are showing up?</button>
+            <button class="starter-button" type="button" data-question="What have I bought at Walmart?">What have I bought at Walmart?</button>
+            <button class="starter-button" type="button" data-question="What food might I have to eat?">What food might I have to eat?</button>
+          </div>
+        </div>
+      </section>
+
+      <p class="ask-caveat">A purchase does not mean an item is current inventory. “Recent” means the latest five relevant remembered purchases. Purchases with unknown dates are not presumed to be recent.</p>
+
+      <section id="ask-result" class="ask-result" aria-live="polite" aria-atomic="true" hidden>
+        <div id="ask-status" class="result ask-status" role="status"></div>
+        <article id="answer-panel" class="panel answer-panel" hidden>
+          <div class="answer-heading">
+            <div>
+              <p class="eyebrow">Purchase-history answer</p>
+              <h2 id="answer-title">Answer</h2>
+            </div>
+            <span id="answer-state" class="answer-state"></span>
+          </div>
+          <p id="answer-text" class="answer-text"></p>
+          <dl id="answer-provenance" class="answer-provenance"></dl>
+
+          <section class="facts-section" aria-labelledby="facts-heading">
+            <h3 id="facts-heading">Based on supporting facts</h3>
+            <p id="facts-empty" class="hint" hidden>No supporting facts were returned for this answer.</p>
+            <ul id="supporting-facts" class="supporting-facts"></ul>
+          </section>
+        </article>
+      </section>
+      </main>
+    </div>
+    <script src="/static/ask.js"></script>
+  </body>
+</html>

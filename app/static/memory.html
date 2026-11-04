@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Purchase Intelligence — Purchase history</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      __NAV__
+      <main id="main-content" class="app-main">
+      <header class="page-heading"><div>
+        <p class="eyebrow">Your confirmed records</p>
+        <h1>Purchase history</h1>
+        <p class="lede">A record of items you bought, not a view of what is still in your home.</p>
+      </div><a class="button-link button-secondary" href="/intake">Upload receipt</a></header>
+      <nav class="filters" aria-label="Purchase history filters">
+        <a href="/memory">All purchases</a>
+        <a href="/memory?filter=food">Food</a>
+        <a href="/memory?filter=non-food">Non-food</a>
+        <a href="/memory?filter=need">Need</a>
+        <a href="/memory?filter=want">Want</a>
+        <a href="/memory?filter=consumable">Consumable</a>
+        <a href="/memory?filter=long-term">Long-term</a>
+      </nav>
+      <section id="memory-list" class="memory-list" aria-live="polite"></section>
+      <section id="memory-detail" class="panel" hidden>
+        <h2>Remembered purchase</h2>
+        <div id="memory-summary"></div>
+        <div id="memory-items" class="line-list"></div>
+      </section>
+      </main>
+    </div>
+    <script src="/static/memory.js"></script>
+  </body>
+</html>

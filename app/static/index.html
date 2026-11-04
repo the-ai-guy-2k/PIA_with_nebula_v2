@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Purchase Intelligence — Receipt intake</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      __NAV__
+      <main id="main-content" class="app-main">
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow">Scan · Understand · Remember</p>
+          <h1>Receipt intake</h1>
+          <p class="lede">Preserve the original receipt image, review the unconfirmed extraction, and confirm the purchase explicitly. The original image stays unchanged.</p>
+        </div>
+      </header>
+
+      <form id="intake-form" class="panel" action="/api/receipts" method="post" enctype="multipart/form-data">
+        <label for="receipt-file">Receipt image</label>
+        <input
+          id="receipt-file"
+          name="file"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          aria-describedby="file-hint"
+        >
+        <p id="file-hint" class="hint">JPEG, PNG, or WEBP. Maximum __MAX_MB__ MB.</p>
+        <button id="submit-button" type="submit">Preserve receipt</button>
+        <div id="result" class="result" role="status" aria-live="polite"></div>
+      </form>
+
+      <section class="panel extract-panel">
+        <h2>Extraction</h2>
+        <p class="hint">
+          Use an evidence ID from a preserved receipt. This creates an unconfirmed candidate.
+          It does not confirm the purchase or change the original image.
+        </p>
+        <form id="extract-form">
+          <label for="evidence-id">Evidence ID</label>
+          <input id="evidence-id" name="evidence_id" type="text" autocomplete="off" spellcheck="false" maxlength="80">
+          <button id="extract-button" type="submit">Extract receipt</button>
+          <div id="extraction-result" class="result" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section class="panel confirmed-panel">
+        <h2>Confirmed purchase</h2>
+        <p class="hint">
+          A confirmed purchase is saved only after you choose Confirm purchase.
+          It stays separate from the unconfirmed extraction.
+        </p>
+        <form id="purchase-lookup">
+          <label for="purchase-id">Purchase ID</label>
+          <input id="purchase-id" name="purchase_id" type="text" autocomplete="off" spellcheck="false" maxlength="80">
+          <button id="show-purchase" type="submit">Show confirmed purchase</button>
+          <div id="purchase-lookup-result" class="result" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <p class="footnote">Original receipt bytes stay on this machine, separate from extracted candidates and confirmed purchases.</p>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

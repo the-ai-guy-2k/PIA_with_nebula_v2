@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Purchase Intelligence — Overview</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      __NAV__
+      <main id="main-content" class="app-main">
+        <header class="page-heading">
+          <div>
+            <p class="eyebrow">Your purchase memory</p>
+            <h1>Good to have it remembered.</h1>
+            <p class="lede">A clear view of purchases you confirmed, patterns in that history, and details worth recalling.</p>
+          </div>
+          <a class="button-link button-secondary" href="/memory">Browse history</a>
+        </header>
+
+        <section class="kpi-grid" aria-label="Purchase history summary">
+          <article class="kpi"><span class="kpi-label">Total purchases</span><strong id="kpi-purchases" class="kpi-value">—</strong><p class="kpi-note">Confirmed and remembered</p></article>
+          <article class="kpi"><span class="kpi-label">Repeat items</span><strong id="kpi-repeats" class="kpi-value">—</strong><p class="kpi-note">Item identities purchased more than once</p></article>
+          <article class="kpi"><span class="kpi-label">Food items</span><strong id="kpi-food" class="kpi-value">—</strong><p class="kpi-note">Currently classified as food</p></article>
+          <article class="kpi"><span class="kpi-label">AI insights</span><strong id="kpi-ai" class="kpi-value status-word">Checking</strong><p id="kpi-ai-note" class="kpi-note">Query capability status</p></article>
+        </section>
+
+        <div class="overview-grid">
+          <section class="surface" aria-labelledby="recent-title">
+            <div class="section-heading"><div><h2 id="recent-title">Recent purchases</h2><p>Latest remembered receipts</p></div><a class="small-link" href="/memory">All history →</a></div>
+            <div id="recent-list" class="recent-list" aria-live="polite"><p class="hint">Loading remembered purchases…</p></div>
+          </section>
+          <section class="surface repeats-panel" aria-labelledby="repeat-title">
+            <div class="section-heading"><div><h2 id="repeat-title">Items that recur</h2><p>Purchase occurrences in your history</p></div><a class="small-link" href="/analytics">Patterns →</a></div>
+            <div id="overview-repeat-list" class="bar-list" aria-live="polite"><p class="hint">Loading pattern data…</p></div>
+            <p id="repeat-scope" class="data-note">Bars show recorded purchase occurrences; they are not a forecast.</p>
+          </section>
+        </div>
+
+        <div class="secondary-grid">
+          <section class="surface" aria-labelledby="most-title">
+            <div class="section-heading"><div><h2 id="most-title">Most repeated items</h2><p>Frequency from confirmed purchases</p></div></div>
+            <div id="most-repeated" class="pattern-list" aria-live="polite"><p class="hint">Loading…</p></div>
+          </section>
+          <section class="surface" aria-labelledby="merchant-title">
+            <div class="section-heading"><div><h2 id="merchant-title">Top merchants</h2><p>Counted by remembered purchase</p></div></div>
+            <div id="top-merchants" class="mini-counts" aria-live="polite"><p class="hint">Loading…</p></div>
+          </section>
+          <section class="surface" aria-labelledby="need-title">
+            <div class="section-heading"><div><h2 id="need-title">Needs, wants & unknown</h2><p>As items are currently classified</p></div></div>
+            <div id="need-want-counts" class="meter-list" aria-live="polite"><p class="hint">Loading…</p></div>
+          </section>
+          <section class="surface ask-entry" aria-labelledby="ask-entry-title">
+            <div class="section-heading"><div><h2 id="ask-entry-title">Ask about your purchases</h2><p>Start from a question. Ask AI will use purchase history.</p></div></div>
+            <form id="overview-ask-form" action="/ask" method="get">
+              <label class="visually-hidden" for="overview-question">Your question</label>
+              <input id="overview-question" name="question" type="text" maxlength="500" placeholder="What would you like to remember?" required>
+              <button type="submit">Continue</button>
+            </form>
+            <div class="starter-links" aria-label="Suggested questions">
+              <a href="/ask?question=What%20food%20did%20I%20buy%20recently%3F">Food bought recently</a>
+              <a href="/ask?question=What%20do%20I%20buy%20often%3F">What I buy often</a>
+              <a href="/ask?question=What%20patterns%20are%20showing%20up%3F">Patterns</a>
+              <a href="/ask?question=What%20have%20I%20bought%20at%20Walmart%3F">Walmart history</a>
+            </div>
+          </section>
+        </div>
+
+        <section class="surface content-section" aria-labelledby="food-preview-title">
+          <div class="section-heading"><div><h2 id="food-preview-title">Food in purchase history</h2><p>Recent eligible Walmart food purchases, not a view of current inventory.</p></div><a class="small-link" href="/food-recall">Open Food Recall →</a></div>
+          <div id="food-preview" class="food-preview-grid" aria-live="polite"><p class="hint">Loading food recall…</p></div>
+        </section>
+        <p class="footnote">Every count comes from remembered purchase records. No receipt totals are available in this summary.</p>
+      </main>
+    </div>
+    <script src="/static/overview.js"></script>
+  </body>
+</html>
