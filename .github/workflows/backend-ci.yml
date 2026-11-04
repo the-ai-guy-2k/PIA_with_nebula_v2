@@ -1,0 +1,63 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  phase-1-flow:
+    name: Phase 1 flow (intake, extract, correct, confirm, pantry, analytics)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (Tesseract OCR + DejaVu fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr fonts-dejavu-core
+          tesseract --version
+          fc-match -f "%{file}" "DejaVu Sans:style=Bold"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run phase-1 flow test
+        run: python -m pytest tests/test_pia_backend_phase1.py -v
+
+  full-suite:
+    name: Full suite (excluding visual/ai)
+    needs: phase-1-flow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (Tesseract OCR + DejaVu fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr fonts-dejavu-core
+          tesseract --version
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run full suite (excluding visual/ai)
+        run: python -m pytest tests/ -v -k "not visual and not ai"
