@@ -83,18 +83,25 @@ async def _recognize(image_bytes: bytes) -> list[str]:
 
 
 def _prepare_ocr_bytes(image_bytes: bytes) -> bytes:
-    """Decode for a readability check. Scale only the in-memory OCR copy."""
+    """Decode, grayscale, and 2x-upscale the in-memory OCR copy.
+
+    Best fit for the Droplet (measured Nov 4, 2026, on Tee's Walmart photo):
+    grayscale 2x upscale + psm6 gave 22/47 parser lines vs 14 raw, and
+    found the subtotal. No new dependency, no AI, no cloud call.
+    The original preserved receipt bytes are never modified.
+    """
     if not image_bytes:
         raise UnreadableReceipt(_UNREADABLE)
     Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     try:
         with Image.open(io.BytesIO(image_bytes)) as image:
             image.load()
-            width, height = image.size
-            if width <= _MAX_EDGE and height <= _MAX_EDGE:
-                return image_bytes
-            scale = _MAX_EDGE / max(width, height)
-            resized = image.convert("RGB").resize(
+            gray = image.convert("L")
+            width, height = gray.size
+            scale = 2.0
+            if max(width, height) * scale > _MAX_EDGE:
+                scale = _MAX_EDGE / max(width, height)
+            resized = gray.resize(
                 (max(1, int(width * scale)), max(1, int(height * scale))),
                 Image.Resampling.LANCZOS,
             )

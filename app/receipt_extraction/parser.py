@@ -18,8 +18,10 @@ _QTY = re.compile(r"\b(\d{1,3})\s*@\s*\$?(\d{1,6}\.\d{2})\b")
 _PRICE_ONLY = re.compile(r"\A\$?\d{1,6}\.\d{2}\Z")
 _SUBTOTAL = re.compile(r"\Asub[\s-]*total\b", re.IGNORECASE)
 _TOTAL_TAX = re.compile(r"\Atotal\s+tax\b", re.IGNORECASE)
-_TAX = re.compile(r"\Atax\b", re.IGNORECASE)
-_TOTAL = re.compile(r"\A(?:grand\s+)?total\b|\Aamount\s+due\b|\Abalance\s+due\b", re.IGNORECASE)
+_TAX = re.compile(r"\Atax\d*\b", re.IGNORECASE)
+_TOTAL = re.compile(r"\b(?:grand\s+)?total\b|\bamount\s+due\b|\bbalance\s+due\b", re.IGNORECASE)
+_TENDER = re.compile(r"\bdebit\s+tend\b|\btender\b", re.IGNORECASE)
+_CHANGE_DUE = re.compile(r"\bchange\s+due\b", re.IGNORECASE)
 _PHONE = re.compile(r"(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\d)")
 _ADDRESS = re.compile(
     r"\b(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr)\b\.?",
@@ -28,6 +30,7 @@ _ADDRESS = re.compile(
 _STREET_NUMBER = re.compile(r"\A\d{1,6}\s+[A-Za-z]")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _MDY_DATE = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b")
+_MDY2_DATE = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2})\b")
 _SPACED_DATE = re.compile(r"\b(\d{1,2})\s+(\d{1,2})\s+(\d{4})\b")
 _TIME = re.compile(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?\b")
 _MONTHS = {
@@ -194,6 +197,8 @@ def _items_and_totals(
     subtotal = None
     tax = None
     total = None
+    tender_amount = None
+    garbled_total = None
     items: list[ParsedLine] = []
     pending: ParsedLine | None = None
 
@@ -215,6 +220,21 @@ def _items_and_totals(
             elif kind == "total" and total is None:
                 total = amount
             continue
+        if _CHANGE_DUE.search(line):
+            flush()
+            continue
+        if _TENDER.search(line):
+            flush()
+            amount = _single_money(line)
+            if amount is not None and tender_amount is None:
+                tender_amount = amount
+            continue
+        if _is_garbled_total(line):
+            flush()
+            amount = _single_money(line)
+            if amount is not None and garbled_total is None:
+                garbled_total = amount
+            continue
         if pending is not None and _PRICE_ONLY.fullmatch(line) and _can_attach_price(pending):
             pending = ParsedLine(
                 raw_text=f"{pending.raw_text} {line}",
@@ -230,7 +250,27 @@ def _items_and_totals(
             continue
         flush()
     flush()
-    return subtotal, tax, total, items
+    if total is None:
+        total = tender_amount or garbled_total
+    deduped: list[ParsedLine] = []
+    for item in items:
+        if deduped and (
+            item.normalized_name_candidate == deduped[-1].normalized_name_candidate
+            and item.line_total_candidate == deduped[-1].line_total_candidate
+            and item.normalized_name_candidate is not None
+        ):
+            continue
+        deduped.append(item)
+    return subtotal, tax, total, deduped
+
+
+def _is_garbled_total(line: str) -> bool:
+    """A short garbled token + one amount, e.g. OCR 'TAL 163.85' for TOTAL."""
+    amount = _single_money(line)
+    if amount is None:
+        return False
+    text = _MONEY.sub(" ", line).strip(" \t.,;:-")
+    return 0 < len(text) <= 4 and text.isalpha()
 
 
 def _summary_kind(line: str) -> str | None:
@@ -329,6 +369,11 @@ def _find_date(line: str) -> date | None:
     mdy_match = _MDY_DATE.search(line)
     if mdy_match:
         found = _valid_date(int(mdy_match.group(3)), int(mdy_match.group(1)), int(mdy_match.group(2)))
+        if found is not None:
+            return found
+    mdy2_match = _MDY2_DATE.search(line)
+    if mdy2_match:
+        found = _valid_date(2000 + int(mdy2_match.group(3)), int(mdy2_match.group(1)), int(mdy2_match.group(2)))
         if found is not None:
             return found
     month_match = _MONTH_DATE.search(line)
