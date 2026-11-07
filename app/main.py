@@ -25,6 +25,13 @@ from app.corrections.service import (
     record_correction,
     suggestions_for_extraction,
 )
+from app.muse_ai.repository import init_muse_ai_db, read_audit
+from app.muse_ai.service import (
+    ingest_muse_extraction,
+    queue_receipt,
+    queue_status,
+)
+from app.muse_ai.validation import MusePayloadError
 from app.pantry.repository import init_pantry_db
 from app.pantry.service import (
     PantryNotFound,
@@ -87,6 +94,8 @@ def create_app(
     init_visual_db(settings)
     init_pantry_db(settings)
     init_corrections_db(settings)
+    init_muse_ai_db(settings)
+    muse_ai_logger = logging.getLogger("purchase_intelligence.muse_ai")
 
     app = FastAPI(
         title="Purchase Intelligence",
@@ -218,6 +227,69 @@ def create_app(
                 content={"status": "not_found", "reason": "No extraction exists for this receipt."},
             )
         return JSONResponse(status_code=200, content=_reviewed_extraction(settings, record))
+
+    @app.post("/api/receipts/{evidence_id}/muse-ai")
+    def queue_muse_ai(evidence_id: str) -> JSONResponse:
+        """Queue a receipt for Muse to read. Tim polls the queue over SSH."""
+        try:
+            record = queue_receipt(settings, evidence_id)
+        except EvidenceNotFound:
+            return _not_found()
+        muse_ai_logger.info("muse-ai queued evidence_id=%s", evidence_id)
+        return JSONResponse(status_code=202, content=record.to_public_dict())
+
+    @app.get("/api/receipts/{evidence_id}/muse-ai")
+    def read_muse_ai_status(evidence_id: str) -> JSONResponse:
+        record = queue_status(settings, evidence_id)
+        if record is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "reason": "This receipt is not queued for Muse AI."},
+            )
+        payload = record.to_public_dict()
+        if record.extraction_id:
+            audit = read_audit(settings, record.extraction_id)
+            if audit is not None:
+                payload["totals_reconciled"] = audit.totals_reconciled
+                payload["total_mismatch"] = audit.total_mismatch
+                payload["lines_sum"] = audit.lines_sum
+        return JSONResponse(status_code=200, content=payload)
+
+    @app.post("/api/receipts/{evidence_id}/muse-ai/ingest")
+    async def ingest_muse_ai(evidence_id: str, request: Request) -> JSONResponse:
+        """Store a Muse extraction as the receipt's unconfirmed candidate."""
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "rejected", "reason": "The extraction could not be read."},
+            )
+        try:
+            record, audit = ingest_muse_extraction(settings, evidence_id, payload)
+        except EvidenceNotFound:
+            return _not_found()
+        except MusePayloadError as exc:
+            muse_ai_logger.info("muse-ai ingest rejected evidence_id=%s reason=%s", evidence_id, exc)
+            return JSONResponse(
+                status_code=422,
+                content={"status": "rejected", "reason": str(exc)},
+            )
+        muse_ai_logger.info(
+            "muse-ai ingested evidence_id=%s extraction_id=%s lines=%s reconciled=%s",
+            evidence_id,
+            record.extraction_id,
+            len(record.lines),
+            audit.totals_reconciled,
+        )
+        content = _reviewed_extraction(settings, record)
+        content["muse_ai"] = {
+            "source": "muse_ai",
+            "totals_reconciled": audit.totals_reconciled,
+            "total_mismatch": audit.total_mismatch,
+            "lines_sum": audit.lines_sum,
+        }
+        return JSONResponse(status_code=200, content=content)
 
     @app.post("/api/purchases")
     async def confirm_reviewed_purchase(request: Request) -> JSONResponse:
