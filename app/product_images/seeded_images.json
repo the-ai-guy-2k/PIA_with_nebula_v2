@@ -5,8 +5,9 @@
     "source": "open_beauty_facts"
   },
   "upc:023185680000": {
-    "image_url": "https://waterbutlers.com/cdn/shop/products/flents2_b60d5771-90fc-4b36-b4ed-4d685249e835.jpg?v=1596998439",
+    "image_url": "https://taigtsp.duckdns.org/pia-ui/pantry-dashboard/images/flents-quiet-time-10pair.jpg",
     "product_name": "Flents Quiet Time Foam Ear Plugs, 10 pair",
-    "source": "image_search"
+    "source": "image_search",
+    "note": "Same verified Flents photo as before, re-hosted same-origin: the retailer's CDN URL returned 200 to curl but never rendered in the browser, so the file now lives with the dashboard."
   }
 }
