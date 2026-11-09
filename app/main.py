@@ -42,6 +42,7 @@ from app.pantry.service import (
     read_pantry,
     set_status,
 )
+from app.product_images.service import lookup_image
 from app.purchase_analytics.service import build_analytics
 from app.purchase_confirmation.confidence import assess_extraction
 from app.purchase_memory.errors import MemoryNotFound, MemoryRejected, PurchaseNotFound
@@ -443,6 +444,13 @@ def create_app(
             for item in report.get("repeat_items", [])
         ]
         return JSONResponse(status_code=200, content={"status": "ok", "most_bought": items})
+
+    # Product photos: seeded mapping first, then Open Beauty Facts /
+    # Open Food Facts by UPC, then by name. No photo found is a plain
+    # "not_found" — the display shows a placeholder, never a wrong photo.
+    @app.get("/api/products/image")
+    def read_product_image(upc: str | None = None, name: str | None = None) -> JSONResponse:
+        return JSONResponse(status_code=200, content=lookup_image(upc=upc, name=name))
 
     # Pantry: What's in the house. Single user, no auth, no deletion.
     @app.get("/api/pantry")

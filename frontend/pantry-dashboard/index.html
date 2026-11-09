@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Pantry dashboard — PIA</title>
+<style>
+  :root { --greige: #dbd5c9; --bone: #f5f0e6; --ink: #2b2620; --muted: #6f6a5e; --accent: #7a4a2b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--greige); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  header { background: var(--bone); padding: 10px 16px; font-weight: 700; border-bottom: 1px solid #cfc8b8; position: sticky; top: 0; z-index: 5; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .searchrow { display: flex; align-items: center; gap: 16px; }
+  .searchrow input { flex: 1; padding: 12px 14px; font-size: 16px; border: 1px solid #cfc8b8; border-radius: 8px; background: #fff; }
+  .leftcount { font-weight: 700; white-space: nowrap; }
+  h2 { font-size: 20px; margin: 28px 0 12px; }
+  h2 .n { font-weight: 400; color: var(--muted); font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .card { background: var(--bone); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.12); cursor: pointer; position: relative; }
+  .thumb { background: #fff; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
+  .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .thumb .ph { font-size: 42px; font-weight: 700; color: #b9b2a2; }
+  .name { padding: 10px 12px 4px; font-weight: 700; font-size: 15px; }
+  .meta { padding: 0 12px 12px; font-size: 13px; color: var(--muted); }
+  .qty { position: absolute; top: 8px; right: 8px; background: #c0392b; color: #fff; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+  .low { color: #b7791f; font-weight: 700; }
+  .actions { display: none; padding: 0 12px 12px; gap: 6px; flex-wrap: wrap; }
+  .card.open .actions { display: flex; }
+  .actions button { border: 1px solid #cfc8b8; background: #fff; border-radius: 6px; padding: 6px 9px; cursor: pointer; font-size: 13px; }
+  .badge { display: inline-block; background: #f3e3c8; color: var(--accent); border-radius: 6px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+  .note { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  .err { background: #fbe3e3; border: 1px solid #d88; padding: 10px 12px; border-radius: 8px; }
+  .revline { display: flex; gap: 10px; align-items: center; background: var(--bone); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+  .revline .thumb { width: 64px; height: 64px; flex: none; border-radius: 8px; }
+  .revline .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .revline .nm { font-weight: 700; }
+  .revline .pr { margin-left: auto; font-weight: 700; white-space: nowrap; }
+  @media (max-width: 600px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header>pantry dashboard</header>
+<main>
+  <div class="searchrow">
+    <input id="q" type="search" placeholder="Find something..." autocomplete="off">
+    <span class="leftcount" id="leftcount">…</span>
+  </div>
+  <p class="note">What's in the house — real pantry data from PIA. Tap a card to mark it In stock, Used, or Gone.</p>
+  <div id="err"></div>
+  <div id="groups"></div>
+
+  <h2>Latest receipt — Review &amp; Confirm <span class="n" id="revmeta"></span></h2>
+  <p class="note"><span class="badge">UNCONFIRMED</span> Nothing counts until you confirm it. Confirm in the PIA app, on the Review tab — not here.</p>
+  <div id="review"></div>
+  <p class="note" style="margin-top:24px">PIA hood AI: receipt photo → Muse extraction → Review &amp; Confirm → pantry. Product photos come from the PIA photo lookup (verified photos first, then Open Beauty Facts / Open Food Facts by barcode). No photo found shows a plain placeholder — never a wrong product's picture.</p>
+</main>
+<script>
+const API = "/pia-api/api";
+// Latest receipt Tee sent (Nov 6, 2026 Walmart, $164.54, 37 lines).
+// If this receipt is confirmed or replaced, this section hides itself.
+const LATEST_EVIDENCE_ID = "935fac61-bfe6-47e3-a349-505cddb854e4";
+let ALL = [];
+const imgCache = new Map();
+
+function partOfDay(h) { if (h >= 5 && h < 12) return "morning"; if (h >= 12 && h < 17) return "afternoon"; return "night"; }
+function groupLabel(iso) {
+  const d = new Date(iso);
+  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${days[d.getDay()]} ${partOfDay(d.getHours())}, ${months[d.getMonth()]} ${d.getDate()}`;
+}
+function upcFrom(raw) { const m = (raw || "").match(/\b(\d{12,13})\b/); return m ? m[1] : ""; }
+
+async function photo(item) {
+  const key = (item.upc || "") + "|" + (item.name || "");
+  if (imgCache.has(key)) return imgCache.get(key);
+  const params = new URLSearchParams();
+  if (item.upc) params.set("upc", item.upc);
+  if (item.name) params.set("name", item.name);
+  let url = null;
+  try {
+    const r = await fetch(`${API}/products/image?${params}`);
+    const j = await r.json();
+    if (j.status === "ok" && j.image_url) url = j.image_url;
+  } catch (e) { /* no photo — placeholder */ }
+  imgCache.set(key, url);
+  return url;
+}
+function initials(name) { return (name || "?").trim().charAt(0).toUpperCase(); }
+
+async function loadPantry() {
+  const r = await fetch(`${API}/pantry`);
+  if (!r.ok) throw new Error("Pantry request failed: " + r.status);
+  const j = await r.json();
+  ALL = (j.items || []).map(it => ({
+    id: it.pantry_item_id, name: it.item_name, status: it.status,
+    qty: it.qty_on_hand, low: it.low, created_at: it.created_at, upc: ""
+  }));
+  render();
+}
+function render() {
+  const q = (document.getElementById("q").value || "").toLowerCase();
+  const items = ALL.filter(it => !q || it.name.toLowerCase().includes(q));
+  const left = ALL.filter(it => it.status === "in_stock").length;
+  const leftF = items.filter(it => it.status === "in_stock").length;
+  document.getElementById("leftcount").textContent = `${leftF} of ${left} left`;
+  const groups = new Map();
+  for (const it of items) {
+    const key = (it.created_at || "").slice(0, 10);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
+  }
+  const host = document.getElementById("groups");
+  host.innerHTML = "";
+  const keys = [...groups.keys()].sort().reverse();
+  if (!keys.length) { host.innerHTML = "<p class='note'>Nothing matches that search.</p>"; return; }
+  for (const key of keys) {
+    const list = groups.get(key);
+    const h = document.createElement("h2");
+    h.innerHTML = `${groupLabel(list[0].created_at)} <span class="n">· ${list.length} item${list.length > 1 ? "s" : ""}</span>`;
+    host.appendChild(h);
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    host.appendChild(grid);
+    for (const it of list) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `<div class="thumb"><span class="ph">${initials(it.name)}</span></div>
+        <div class="name"></div>
+        <div class="meta">${it.status}${it.low ? ' · <span class="low">Low</span>' : ''} · qty ${it.qty}</div>
+        <div class="actions">
+          <button data-s="in_stock">In stock</button>
+          <button data-s="used">Used</button>
+          <button data-s="gone">Gone</button>
+        </div>`;
+      card.querySelector(".name").textContent = it.name;
+      if (it.qty > 1) { const b = document.createElement("span"); b.className = "qty"; b.textContent = "×" + Math.round(it.qty); card.appendChild(b); }
+      card.addEventListener("click", (e) => {
+        if (e.target.tagName === "BUTTON") {
+          setStatus(it.id, e.target.dataset.s);
+        } else { card.classList.toggle("open"); }
+      });
+      grid.appendChild(card);
+      photo(it).then(url => {
+        if (!url) return;
+        const thumb = card.querySelector(".thumb");
+        thumb.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = url; img.alt = it.name; img.loading = "lazy";
+        img.onerror = () => { thumb.innerHTML = `<span class="ph">${initials(it.name)}</span>`; };
+        thumb.appendChild(img);
+      });
+    }
+  }
+}
+async function setStatus(id, status) {
+  await fetch(`${API}/pantry/${id}/status`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ status }) });
+  loadPantry();
+}
+async function loadReview() {
+  const host = document.getElementById("review");
+  try {
+    const r = await fetch(`${API}/receipts/${LATEST_EVIDENCE_ID}/extraction`);
+    if (!r.ok) { host.innerHTML = "<p class='note'>No unconfirmed receipt waiting.</p>"; return; }
+    const j = await r.json();
+    const lines = j.lines || [];
+    document.getElementById("revmeta").textContent =
+      `· ${j.merchant_normalized_candidate || "Walmart"} · ${lines.length} lines · $${j.total_candidate || ""}`;
+    host.innerHTML = "";
+    for (const l of lines) {
+      const row = document.createElement("div");
+      row.className = "revline";
+      const name = l.normalized_name_candidate || l.raw_text || "Item";
+      row.innerHTML = `<div class="thumb"><span class="ph">${initials(name)}</span></div>
+        <div><div class="nm"></div><div class="meta">${l.raw_text || ""}</div></div>
+        <div class="pr">$${l.line_total_candidate || ""}</div>`;
+      row.querySelector(".nm").textContent = name;
+      host.appendChild(row);
+      photo({ name, upc: upcFrom(l.raw_text) }).then(url => {
+        if (!url) return;
+        const thumb = row.querySelector(".thumb");
+        thumb.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = url; img.alt = name; img.loading = "lazy";
+        img.onerror = () => { thumb.innerHTML = `<span class="ph">${initials(name)}</span>`; };
+        thumb.appendChild(img);
+      });
+    }
+  } catch (e) { host.innerHTML = "<p class='note'>Could not load the latest receipt.</p>"; }
+}
+document.getElementById("q").addEventListener("input", render);
+loadPantry().catch(e => { document.getElementById("err").innerHTML = `<div class="err">${e.message}</div>`; });
+loadReview();
+</script>
+</body>
+</html>
