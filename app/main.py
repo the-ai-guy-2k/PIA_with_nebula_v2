@@ -25,6 +25,13 @@ from app.corrections.service import (
     record_correction,
     suggestions_for_extraction,
 )
+from app.muse_ai.display import (
+    DisplayPayloadError,
+    read_display,
+    read_latest_display,
+    store_display,
+    validate_display_payload,
+)
 from app.muse_ai.repository import init_muse_ai_db, read_audit
 from app.muse_ai.service import (
     ingest_muse_extraction,
@@ -291,6 +298,99 @@ def create_app(
             "lines_sum": audit.lines_sum,
         }
         return JSONResponse(status_code=200, content=content)
+
+    # Display object (Tee, Nov 8, 2026): Muse builds ONE structured
+    # object per receipt / pantry — extraction + per-item pictures +
+    # grouped display data — and the server stores it and hands it to
+    # the UI. The UI renders it, nothing else. A display object NEVER
+    # changes confirmation state: its status must match the receipt's
+    # actual state, and a "confirmed" receipt display is refused
+    # unless a confirmed purchase already exists for that extraction.
+    @app.post("/api/receipts/{evidence_id}/muse-ai/display")
+    async def ingest_muse_ai_display(evidence_id: str, request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "rejected", "reason": "The display object could not be read."},
+            )
+        try:
+            record = read_extraction(settings, evidence_id)
+        except EvidenceNotFound:
+            return _not_found()
+        if record is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "reason": "No extraction exists for this receipt."},
+            )
+        try:
+            display = validate_display_payload(payload)
+        except DisplayPayloadError as exc:
+            return JSONResponse(status_code=422, content={"status": "rejected", "reason": str(exc)})
+        if display["kind"] != "receipt" or display.get("evidence_id") != evidence_id:
+            return JSONResponse(
+                status_code=422,
+                content={"status": "rejected", "reason": "Display object kind/evidence_id do not match this receipt."},
+            )
+        existing = get_purchase_for_extraction(settings, record.extraction_id)
+        actual_state = "confirmed" if existing else "unconfirmed"
+        if display["status"] != actual_state:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "status": "rejected",
+                    "reason": f"Display status is {display['status']} but this receipt is {actual_state}.",
+                },
+            )
+        stored = store_display(settings, f"receipt:{evidence_id}", "receipt", display)
+        return JSONResponse(status_code=200, content=stored)
+
+    @app.get("/api/receipts/{evidence_id}/display")
+    def read_muse_ai_display(evidence_id: str) -> JSONResponse:
+        stored = read_display(settings, f"receipt:{evidence_id}")
+        if stored is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "reason": "No display object exists for this receipt."},
+            )
+        return JSONResponse(status_code=200, content=stored)
+
+    @app.post("/api/display/pantry")
+    async def ingest_pantry_display(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "rejected", "reason": "The display object could not be read."},
+            )
+        try:
+            display = validate_display_payload(payload)
+        except DisplayPayloadError as exc:
+            return JSONResponse(status_code=422, content={"status": "rejected", "reason": str(exc)})
+        if display["kind"] != "pantry":
+            return JSONResponse(
+                status_code=422,
+                content={"status": "rejected", "reason": "Display object kind must be 'pantry'."},
+            )
+        stored = store_display(settings, "pantry", "pantry", display)
+        return JSONResponse(status_code=200, content=stored)
+
+    @app.get("/api/display/latest")
+    def read_latest_display_object(kind: str = "pantry") -> JSONResponse:
+        if kind not in ("pantry", "receipt"):
+            return JSONResponse(
+                status_code=400,
+                content={"status": "rejected", "reason": "kind must be 'pantry' or 'receipt'."},
+            )
+        stored = read_latest_display(settings, kind)
+        if stored is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "reason": f"No {kind} display object exists yet."},
+            )
+        return JSONResponse(status_code=200, content=stored)
 
     @app.post("/api/purchases")
     async def confirm_reviewed_purchase(request: Request) -> JSONResponse:
