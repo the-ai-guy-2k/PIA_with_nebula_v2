@@ -1,1 +1,12 @@
-{"upc:030772018460":{"image_url":"https://images.openbeautyfacts.org/images/products/003/077/201/8460/front_en.3.400.jpg","product_name":"Ivory Gentle Body Wash","source":"open_beauty_facts"}}
+{
+  "upc:030772018460": {
+    "image_url": "https://images.openbeautyfacts.org/images/products/003/077/201/8460/front_en.3.400.jpg",
+    "product_name": "Ivory Gentle Body Wash",
+    "source": "open_beauty_facts"
+  },
+  "upc:023185680000": {
+    "image_url": "https://waterbutlers.com/cdn/shop/products/flents2_b60d5771-90fc-4b36-b4ed-4d685249e835.jpg?v=1596998439",
+    "product_name": "Flents Quiet Time Foam Ear Plugs, 10 pair",
+    "source": "image_search"
+  }
+}
