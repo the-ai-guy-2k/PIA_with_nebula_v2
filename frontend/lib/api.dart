@@ -51,6 +51,22 @@ class PiaApi {
     return _decode(resp);
   }
 
+  /// Product photo for an item: verified photo first, then Open Beauty
+  /// Facts / Open Food Facts by barcode. Returns null when no photo is
+  /// found — the UI shows a placeholder, never a wrong product's picture.
+  Future<String?> productImage({String? upc, String? name}) async {
+    final params = <String, String>{};
+    if (upc != null && upc.isNotEmpty) params['upc'] = upc;
+    if (name != null && name.isNotEmpty) params['name'] = name;
+    if (params.isEmpty) return null;
+    final uri = Uri.parse('$baseUrl/api/products/image')
+        .replace(queryParameters: params);
+    final resp = await http.get(uri);
+    final body = _decode(resp);
+    final url = body['image_url'];
+    return url is String ? url : null;
+  }
+
   Future<List<dynamic>> pantry() async {
     final resp = await http.get(Uri.parse('$baseUrl/api/pantry'));
     return (_decode(resp)['items'] as List<dynamic>);

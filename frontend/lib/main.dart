@@ -125,6 +125,28 @@ class ReviewScreen extends StatefulWidget {
 class _ReviewScreenState extends State<ReviewScreen> {
   String _msg = '';
   final Map<String, TextEditingController> _edits = {};
+  final Map<String, String> _thumbs = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumbs();
+  }
+
+  /// Product photo per receipt line, by the barcode in its raw text.
+  /// No photo found = initial-letter placeholder, never a wrong picture.
+  Future<void> _loadThumbs() async {
+    final ext = widget.extraction;
+    if (ext == null) return;
+    for (final l in (ext['lines'] as List<dynamic>)) {
+      final lineId = l['line_id'] as String;
+      final raw = (l['raw_text'] as String?) ?? '';
+      final upc = RegExp(r'\b\d{12,13}\b').firstMatch(raw)?.group(0);
+      final url = await widget.api.productImage(
+          upc: upc, name: l['normalized_name_candidate'] as String?);
+      if (url != null && mounted) setState(() => _thumbs[lineId] = url);
+    }
+  }
 
   @override
   void dispose() {
@@ -181,8 +203,15 @@ class _ReviewScreenState extends State<ReviewScreen> {
       ...lines.map((l) {
         final ctrl = _edits.putIfAbsent(
             l['line_id'] as String, () => TextEditingController(text: l['normalized_name_candidate'] ?? ''));
+        final lineId = l['line_id'] as String;
+        final thumbUrl = _thumbs[lineId];
+        final itemName = l['normalized_name_candidate'] as String? ?? '';
         return Card(
           child: ListTile(
+            leading: thumbUrl != null
+                ? Image.network(thumbUrl, width: 56, height: 56, fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => CircleAvatar(child: Text(itemName.isEmpty ? '?' : itemName[0])))
+                : CircleAvatar(child: Text(itemName.isEmpty ? '?' : itemName[0])),
             title: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Item name')),
             subtitle: Text('${l['raw_text'] ?? ''}'),
             trailing: Text('${l['line_total_candidate'] ?? ''}'),
@@ -203,15 +232,41 @@ class PantryScreen extends StatefulWidget {
   State<PantryScreen> createState() => _PantryScreenState();
 }
 
+/// Pantry dashboard, like Tee's screenshot: search box on top with
+/// "X of Y left", items grouped by purchase day
+/// ("Wednesday afternoon, Nov 4 · 9 items"), one card per item with
+/// its photo on top and its name below. Tap a card to mark it
+/// In stock / Used / Gone. No photo found = plain initial placeholder.
 class _PantryScreenState extends State<PantryScreen> {
   List<dynamic> _items = [];
   String _msg = '';
+  String _query = '';
+  final Map<String, String> _images = {};
+  String? _openId;
+
+  static const _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    try { final items = await widget.api.pantry(); setState(() => _items = items); } catch (e) { setState(() => _msg = '$e'); }
+    try {
+      final items = await widget.api.pantry();
+      if (!mounted) return;
+      setState(() => _items = items);
+      for (final item in items) {
+        final id = item['pantry_item_id'] as String;
+        if (_images.containsKey(id)) continue;
+        final url = await widget.api.productImage(name: item['item_name'] as String?);
+        if (url != null && mounted) setState(() => _images[id] = url);
+      }
+    } catch (e) { if (mounted) setState(() => _msg = '$e'); }
   }
 
   Future<void> _set(String id, String status) async {
@@ -219,23 +274,125 @@ class _PantryScreenState extends State<PantryScreen> {
     await _load();
   }
 
+  String _partOfDay(DateTime d) {
+    if (d.hour >= 5 && d.hour < 12) return 'morning';
+    if (d.hour >= 12 && d.hour < 17) return 'afternoon';
+    return 'night';
+  }
+
+  String _groupLabel(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return 'Undated';
+    return '${_weekdays[d.weekday - 1]} ${_partOfDay(d)}, ${_months[d.month - 1]} ${d.day}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final query = _query.toLowerCase();
+    final visible = _items.where((it) =>
+        query.isEmpty || (it['item_name'] as String).toLowerCase().contains(query)).toList();
+    final leftAll = _items.where((it) => it['status'] == 'in_stock').length;
+    final leftVisible = visible.where((it) => it['status'] == 'in_stock').length;
+    final groups = <String, List<dynamic>>{};
+    for (final it in visible) {
+      final key = ((it['created_at'] as String?) ?? '').split('T').first;
+      groups.putIfAbsent(key, () => []).add(it);
+    }
+    final keys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
     return ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('What is in the house', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-      const Text('Tap an item to mark it In stock, Used, or Gone.'),
-      ..._items.map((item) => Card(
-            child: ListTile(
-              title: Text('${item['item_name']}'),
-              subtitle: Text('${item['status']} • qty ${item['qty_on_hand']}${item['low'] == true ? ' • Low' : ''}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                TextButton(onPressed: () => _set(item['pantry_item_id'] as String, 'in_stock'), child: const Text('In stock')),
-                TextButton(onPressed: () => _set(item['pantry_item_id'] as String, 'used'), child: const Text('Used')),
-                TextButton(onPressed: () => _set(item['pantry_item_id'] as String, 'gone'), child: const Text('Gone')),
-              ]),
+      Row(children: [
+        Expanded(
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Find something...',
+              border: OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.white,
             ),
-          )),
-      const SizedBox(height: 12),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text('$leftVisible of $leftAll left', style: const TextStyle(fontWeight: FontWeight.bold)),
+      ]),
+      const SizedBox(height: 8),
+      const Text('Tap a card to mark it In stock, Used, or Gone.'),
+      for (final key in keys) ...[
+        const SizedBox(height: 20),
+        Text(
+          '${_groupLabel((groups[key]!.first['created_at'] as String?) ?? '')} · ${groups[key]!.length} item${groups[key]!.length == 1 ? '' : 's'}',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.72,
+          ),
+          itemCount: groups[key]!.length,
+          itemBuilder: (context, i) {
+            final item = groups[key]![i];
+            final id = item['pantry_item_id'] as String;
+            final name = item['item_name'] as String;
+            final qty = (item['qty_on_hand'] as num?)?.toDouble() ?? 1;
+            final imageUrl = _images[id];
+            final open = _openId == id;
+            return GestureDetector(
+              onTap: () => setState(() => _openId = open ? null : id),
+              child: Card(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: Stack(children: [
+                      Container(
+                        width: double.infinity,
+                        color: Colors.white,
+                        alignment: Alignment.center,
+                        child: imageUrl != null
+                            ? Image.network(imageUrl, fit: BoxFit.contain,
+                                errorBuilder: (_, _, _) => Text(name.isEmpty ? '?' : name[0],
+                                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold)))
+                            : Text(name.isEmpty ? '?' : name[0],
+                                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold)),
+                      ),
+                      if (qty > 1)
+                        Positioned(
+                          top: 6, right: 6,
+                          child: CircleAvatar(radius: 13, backgroundColor: Colors.red,
+                              child: Text('×${qty.toInt()}', style: const TextStyle(fontSize: 12, color: Colors.white))),
+                        ),
+                    ]),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+                    child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                    child: Text(
+                      "${item['status']}${item['low'] == true ? ' · Low' : ''} · qty ${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}",
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ),
+                  if (open)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      child: Wrap(spacing: 6, children: [
+                        TextButton(onPressed: () => _set(id, 'in_stock'), child: const Text('In stock')),
+                        TextButton(onPressed: () => _set(id, 'used'), child: const Text('Used')),
+                        TextButton(onPressed: () => _set(id, 'gone'), child: const Text('Gone')),
+                      ]),
+                    ),
+                ]),
+              ),
+            );
+          },
+        ),
+      ],
+      const SizedBox(height: 16),
       ElevatedButton.icon(
         onPressed: () async {
           final name = TextEditingController();
