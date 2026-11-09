@@ -66,7 +66,7 @@ let REVIEW = null;
 
 function initials(name) { return (name || "?").trim().charAt(0).toUpperCase(); }
 function thumbHtml(item) {
-  if (item.image_url) return `<img src="${item.image_url}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=ph>${initials(item.name)}</span>'">`;
+  if (item.image_url) return `<img src="${item.image_url}" alt="" onerror="this.parentElement.innerHTML='<span class=ph>${initials(item.name)}</span>'">`;
   return `<span class="ph">${initials(item.name)}</span>`;
 }
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
