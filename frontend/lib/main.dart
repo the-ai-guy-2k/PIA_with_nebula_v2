@@ -133,19 +133,24 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _loadThumbs();
   }
 
-  /// Product photo per receipt line, by the barcode in its raw text.
-  /// No photo found = initial-letter placeholder, never a wrong picture.
+  /// The receipt display object Muse built (photos + grouping).
+  /// The screen renders it verbatim; when Muse has not built it yet,
+  /// the raw extraction lines show with plain initial placeholders.
   Future<void> _loadThumbs() async {
     final ext = widget.extraction;
     if (ext == null) return;
-    for (final l in (ext['lines'] as List<dynamic>)) {
-      final lineId = l['line_id'] as String;
-      final raw = (l['raw_text'] as String?) ?? '';
-      final upc = RegExp(r'\b\d{12,13}\b').firstMatch(raw)?.group(0);
-      final url = await widget.api.productImage(
-          upc: upc, name: l['normalized_name_candidate'] as String?);
-      if (url != null && mounted) setState(() => _thumbs[lineId] = url);
+    final evidenceId = ext['evidence_id'] as String?;
+    if (evidenceId == null) return;
+    final display = await widget.api.receiptDisplay(evidenceId);
+    if (display == null || !mounted) return;
+    final thumbs = <String, String>{};
+    for (final group in (display['groups'] as List<dynamic>)) {
+      for (final item in (group['items'] as List<dynamic>)) {
+        final url = item['image_url'];
+        if (url is String) thumbs[item['line_id'] as String] = url;
+      }
     }
+    setState(() => _thumbs.addAll(thumbs));
   }
 
   @override
@@ -233,39 +238,24 @@ class PantryScreen extends StatefulWidget {
 }
 
 /// Pantry dashboard, like Tee's screenshot: search box on top with
-/// "X of Y left", items grouped by purchase day
-/// ("Wednesday afternoon, Nov 4 · 9 items"), one card per item with
-/// its photo on top and its name below. Tap a card to mark it
-/// In stock / Used / Gone. No photo found = plain initial placeholder.
+/// "X of Y left", items grouped by purchase day, one card per item
+/// with its photo on top and its name below. Dumb renderer: the
+/// groups, headings, photos, and counts all come from the display
+/// object Muse built — this screen does no lookup and no grouping.
+/// Tap a card to mark it In stock / Used / Gone.
 class _PantryScreenState extends State<PantryScreen> {
-  List<dynamic> _items = [];
+  Map<String, dynamic>? _display;
   String _msg = '';
   String _query = '';
-  final Map<String, String> _images = {};
   String? _openId;
-
-  static const _weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-  ];
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     try {
-      final items = await widget.api.pantry();
-      if (!mounted) return;
-      setState(() => _items = items);
-      for (final item in items) {
-        final id = item['pantry_item_id'] as String;
-        if (_images.containsKey(id)) continue;
-        final url = await widget.api.productImage(name: item['item_name'] as String?);
-        if (url != null && mounted) setState(() => _images[id] = url);
-      }
+      final display = await widget.api.pantryDisplay();
+      if (mounted) setState(() => _display = display);
     } catch (e) { if (mounted) setState(() => _msg = '$e'); }
   }
 
@@ -274,31 +264,24 @@ class _PantryScreenState extends State<PantryScreen> {
     await _load();
   }
 
-  String _partOfDay(DateTime d) {
-    if (d.hour >= 5 && d.hour < 12) return 'morning';
-    if (d.hour >= 12 && d.hour < 17) return 'afternoon';
-    return 'night';
-  }
-
-  String _groupLabel(String iso) {
-    final d = DateTime.tryParse(iso);
-    if (d == null) return 'Undated';
-    return '${_weekdays[d.weekday - 1]} ${_partOfDay(d)}, ${_months[d.month - 1]} ${d.day}';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final query = _query.toLowerCase();
-    final visible = _items.where((it) =>
-        query.isEmpty || (it['item_name'] as String).toLowerCase().contains(query)).toList();
-    final leftAll = _items.where((it) => it['status'] == 'in_stock').length;
-    final leftVisible = visible.where((it) => it['status'] == 'in_stock').length;
-    final groups = <String, List<dynamic>>{};
-    for (final it in visible) {
-      final key = ((it['created_at'] as String?) ?? '').split('T').first;
-      groups.putIfAbsent(key, () => []).add(it);
+    final display = _display;
+    if (display == null) {
+      return Center(child: Text(_msg.isEmpty ? 'Loading the pantry…' : _msg));
     }
-    final keys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+    final query = _query.toLowerCase();
+    final groups = (display['groups'] as List<dynamic>);
+    final leftTotal = (display['left_count'] as Map?)?['total'] as int? ?? 0;
+    var leftVisible = 0;
+    for (final g in groups) {
+      for (final it in (g['items'] as List<dynamic>)) {
+        if ((query.isEmpty || (it['name'] as String).toLowerCase().contains(query)) &&
+            it['pantry_status'] == 'in_stock') {
+          leftVisible++;
+        }
+      }
+    }
     return ListView(padding: const EdgeInsets.all(16), children: [
       Row(children: [
         Expanded(
@@ -313,14 +296,14 @@ class _PantryScreenState extends State<PantryScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        Text('$leftVisible of $leftAll left', style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text('$leftVisible of $leftTotal left', style: const TextStyle(fontWeight: FontWeight.bold)),
       ]),
       const SizedBox(height: 8),
       const Text('Tap a card to mark it In stock, Used, or Gone.'),
-      for (final key in keys) ...[
+      for (final group in groups) ...[
         const SizedBox(height: 20),
         Text(
-          '${_groupLabel((groups[key]!.first['created_at'] as String?) ?? '')} · ${groups[key]!.length} item${groups[key]!.length == 1 ? '' : 's'}',
+          '${group['heading']} · ${(group['items'] as List<dynamic>).where((it) => query.isEmpty || (it['name'] as String).toLowerCase().contains(query)).length} item${(group['items'] as List<dynamic>).where((it) => query.isEmpty || (it['name'] as String).toLowerCase().contains(query)).length == 1 ? '' : 's'}',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -333,13 +316,18 @@ class _PantryScreenState extends State<PantryScreen> {
             mainAxisSpacing: 10,
             childAspectRatio: 0.72,
           ),
-          itemCount: groups[key]!.length,
+          itemCount: (group['items'] as List<dynamic>)
+              .where((it) => query.isEmpty || (it['name'] as String).toLowerCase().contains(query))
+              .length,
           itemBuilder: (context, i) {
-            final item = groups[key]![i];
+            final visibleItems = (group['items'] as List<dynamic>)
+                .where((it) => query.isEmpty || (it['name'] as String).toLowerCase().contains(query))
+                .toList();
+            final item = visibleItems[i];
             final id = item['pantry_item_id'] as String;
-            final name = item['item_name'] as String;
-            final qty = (item['qty_on_hand'] as num?)?.toDouble() ?? 1;
-            final imageUrl = _images[id];
+            final name = item['name'] as String;
+            final qty = double.tryParse('${item['qty_on_hand']}') ?? 1;
+            final imageUrl = item['image_url'] as String?;
             final open = _openId == id;
             return GestureDetector(
               onTap: () => setState(() => _openId = open ? null : id),
@@ -373,7 +361,7 @@ class _PantryScreenState extends State<PantryScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
                     child: Text(
-                      "${item['status']}${item['low'] == true ? ' · Low' : ''} · qty ${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}",
+                      "${item['pantry_status']} · qty ${item['qty_on_hand']}",
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ),

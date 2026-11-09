@@ -46,152 +46,103 @@
     <input id="q" type="search" placeholder="Find something..." autocomplete="off">
     <span class="leftcount" id="leftcount">…</span>
   </div>
-  <p class="note">What's in the house — real pantry data from PIA. Tap a card to mark it In stock, Used, or Gone.</p>
+  <p class="note">What's in the house — rendered from the PIA display object Muse built (extraction + photos + grouping, all done by Muse; this page just renders what the server hands it). Tap a card to mark it In stock, Used, or Gone.</p>
   <div id="err"></div>
   <div id="groups"></div>
 
   <h2>Latest receipt — Review &amp; Confirm <span class="n" id="revmeta"></span></h2>
   <p class="note"><span class="badge">UNCONFIRMED</span> Nothing counts until you confirm it. Confirm in the PIA app, on the Review tab — not here.</p>
   <div id="review"></div>
-  <p class="note" style="margin-top:24px">PIA hood AI: receipt photo → Muse extraction → Review &amp; Confirm → pantry. Product photos come from the PIA photo lookup (verified photos first, then Open Beauty Facts / Open Food Facts by barcode). No photo found shows a plain placeholder — never a wrong product's picture.</p>
+  <p class="note" style="margin-top:24px">PIA hood AI: receipt photo → Muse extraction + photo lookup + grouping → display object → server → this page. A photo Muse could not find shows a plain placeholder — never a wrong product's picture.</p>
 </main>
 <script>
+// Dumb renderer (Tee's architecture, Nov 8, 2026): this page does NO
+// extraction, NO photo lookup, NO grouping. It fetches the display
+// objects Muse built and renders their groups, headings, and cards
+// verbatim. Search only narrows what is shown.
 const API = "/pia-api/api";
-// Latest receipt Tee sent (Nov 6, 2026 Walmart, $164.54, 37 lines).
-// If this receipt is confirmed or replaced, this section hides itself.
-const LATEST_EVIDENCE_ID = "935fac61-bfe6-47e3-a349-505cddb854e4";
-let ALL = [];
-const imgCache = new Map();
+let PANTRY = null;
+let REVIEW = null;
 
-function partOfDay(h) { if (h >= 5 && h < 12) return "morning"; if (h >= 12 && h < 17) return "afternoon"; return "night"; }
-function groupLabel(iso) {
-  const d = new Date(iso);
-  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${days[d.getDay()]} ${partOfDay(d.getHours())}, ${months[d.getMonth()]} ${d.getDate()}`;
-}
-function upcFrom(raw) { const m = (raw || "").match(/\b(\d{12,13})\b/); return m ? m[1] : ""; }
-
-async function photo(item) {
-  const key = (item.upc || "") + "|" + (item.name || "");
-  if (imgCache.has(key)) return imgCache.get(key);
-  const params = new URLSearchParams();
-  if (item.upc) params.set("upc", item.upc);
-  if (item.name) params.set("name", item.name);
-  let url = null;
-  try {
-    const r = await fetch(`${API}/products/image?${params}`);
-    const j = await r.json();
-    if (j.status === "ok" && j.image_url) url = j.image_url;
-  } catch (e) { /* no photo — placeholder */ }
-  imgCache.set(key, url);
-  return url;
-}
 function initials(name) { return (name || "?").trim().charAt(0).toUpperCase(); }
+function thumbHtml(item) {
+  if (item.image_url) return `<img src="${item.image_url}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=ph>${initials(item.name)}</span>'">`;
+  return `<span class="ph">${initials(item.name)}</span>`;
+}
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
 
-async function loadPantry() {
-  const r = await fetch(`${API}/pantry`);
-  if (!r.ok) throw new Error("Pantry request failed: " + r.status);
-  const j = await r.json();
-  ALL = (j.items || []).map(it => ({
-    id: it.pantry_item_id, name: it.item_name, status: it.status,
-    qty: it.qty_on_hand, low: it.low, created_at: it.created_at, upc: ""
-  }));
+async function loadObjects() {
+  const pr = await fetch(`${API}/display/latest?kind=pantry`);
+  if (!pr.ok) throw new Error("Pantry display object is not on the server yet.");
+  PANTRY = await pr.json();
+  const rr = await fetch(`${API}/display/latest?kind=receipt`);
+  REVIEW = rr.ok ? await rr.json() : null;
   render();
 }
 function render() {
   const q = (document.getElementById("q").value || "").toLowerCase();
-  const items = ALL.filter(it => !q || it.name.toLowerCase().includes(q));
-  const left = ALL.filter(it => it.status === "in_stock").length;
-  const leftF = items.filter(it => it.status === "in_stock").length;
-  document.getElementById("leftcount").textContent = `${leftF} of ${left} left`;
-  const groups = new Map();
-  for (const it of items) {
-    const key = (it.created_at || "").slice(0, 10);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(it);
-  }
+  const groups = PANTRY.groups || [];
+  let shownLeft = 0;
   const host = document.getElementById("groups");
   host.innerHTML = "";
-  const keys = [...groups.keys()].sort().reverse();
-  if (!keys.length) { host.innerHTML = "<p class='note'>Nothing matches that search.</p>"; return; }
-  for (const key of keys) {
-    const list = groups.get(key);
+  for (const group of groups) {
+    const items = group.items.filter(it => !q || it.name.toLowerCase().includes(q));
+    shownLeft += items.filter(it => it.pantry_status === "in_stock").length;
+    if (!items.length) continue;
     const h = document.createElement("h2");
-    h.innerHTML = `${groupLabel(list[0].created_at)} <span class="n">· ${list.length} item${list.length > 1 ? "s" : ""}</span>`;
+    h.innerHTML = `${esc(group.heading)} <span class="n">· ${items.length} item${items.length > 1 ? "s" : ""}</span>`;
     host.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "grid";
     host.appendChild(grid);
-    for (const it of list) {
+    for (const it of items) {
       const card = document.createElement("div");
       card.className = "card";
-      card.innerHTML = `<div class="thumb"><span class="ph">${initials(it.name)}</span></div>
-        <div class="name"></div>
-        <div class="meta">${it.status}${it.low ? ' · <span class="low">Low</span>' : ''} · qty ${it.qty}</div>
+      const qty = parseFloat(it.qty_on_hand || "1");
+      card.innerHTML = `<div class="thumb">${thumbHtml(it)}</div>
+        <div class="name">${esc(it.name)}</div>
+        <div class="meta">${esc(it.pantry_status)} · qty ${it.qty_on_hand}</div>
         <div class="actions">
           <button data-s="in_stock">In stock</button>
           <button data-s="used">Used</button>
           <button data-s="gone">Gone</button>
         </div>`;
-      card.querySelector(".name").textContent = it.name;
-      if (it.qty > 1) { const b = document.createElement("span"); b.className = "qty"; b.textContent = "×" + Math.round(it.qty); card.appendChild(b); }
+      if (qty > 1) { const b = document.createElement("span"); b.className = "qty"; b.textContent = "×" + Math.round(qty); card.appendChild(b); }
       card.addEventListener("click", (e) => {
-        if (e.target.tagName === "BUTTON") {
-          setStatus(it.id, e.target.dataset.s);
-        } else { card.classList.toggle("open"); }
+        if (e.target.tagName === "BUTTON") setStatus(it.pantry_item_id, e.target.dataset.s);
+        else card.classList.toggle("open");
       });
       grid.appendChild(card);
-      photo(it).then(url => {
-        if (!url) return;
-        const thumb = card.querySelector(".thumb");
-        thumb.innerHTML = "";
-        const img = document.createElement("img");
-        img.src = url; img.alt = it.name; img.loading = "lazy";
-        img.onerror = () => { thumb.innerHTML = `<span class="ph">${initials(it.name)}</span>`; };
-        thumb.appendChild(img);
-      });
     }
+  }
+  if (!host.children.length) host.innerHTML = "<p class='note'>Nothing matches that search.</p>";
+  const totalLeft = (PANTRY.left_count && PANTRY.left_count.total) || 0;
+  document.getElementById("leftcount").textContent = `${shownLeft} of ${totalLeft} left`;
+  renderReview(q);
+}
+function renderReview(q) {
+  const host = document.getElementById("review");
+  host.innerHTML = "";
+  if (!REVIEW) { host.innerHTML = "<p class='note'>No unconfirmed receipt waiting.</p>"; return; }
+  const lines = (REVIEW.groups || []).flatMap(g => g.items);
+  const shown = lines.filter(it => !q || it.name.toLowerCase().includes(q));
+  document.getElementById("revmeta").textContent =
+    `· ${REVIEW.merchant || ""} · ${lines.length} lines · $${REVIEW.total || ""} · ${REVIEW.groups.map(g => g.heading).join(", ")}`;
+  for (const it of shown) {
+    const row = document.createElement("div");
+    row.className = "revline";
+    row.innerHTML = `<div class="thumb">${thumbHtml(it)}</div>
+      <div><div class="nm">${esc(it.name)}</div><div class="meta">${esc(it.raw_text || "")}</div></div>
+      <div class="pr">$${esc(it.line_total || "")}</div>`;
+    host.appendChild(row);
   }
 }
 async function setStatus(id, status) {
   await fetch(`${API}/pantry/${id}/status`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ status }) });
-  loadPantry();
-}
-async function loadReview() {
-  const host = document.getElementById("review");
-  try {
-    const r = await fetch(`${API}/receipts/${LATEST_EVIDENCE_ID}/extraction`);
-    if (!r.ok) { host.innerHTML = "<p class='note'>No unconfirmed receipt waiting.</p>"; return; }
-    const j = await r.json();
-    const lines = j.lines || [];
-    document.getElementById("revmeta").textContent =
-      `· ${j.merchant_normalized_candidate || "Walmart"} · ${lines.length} lines · $${j.total_candidate || ""}`;
-    host.innerHTML = "";
-    for (const l of lines) {
-      const row = document.createElement("div");
-      row.className = "revline";
-      const name = l.normalized_name_candidate || l.raw_text || "Item";
-      row.innerHTML = `<div class="thumb"><span class="ph">${initials(name)}</span></div>
-        <div><div class="nm"></div><div class="meta">${l.raw_text || ""}</div></div>
-        <div class="pr">$${l.line_total_candidate || ""}</div>`;
-      row.querySelector(".nm").textContent = name;
-      host.appendChild(row);
-      photo({ name, upc: upcFrom(l.raw_text) }).then(url => {
-        if (!url) return;
-        const thumb = row.querySelector(".thumb");
-        thumb.innerHTML = "";
-        const img = document.createElement("img");
-        img.src = url; img.alt = name; img.loading = "lazy";
-        img.onerror = () => { thumb.innerHTML = `<span class="ph">${initials(name)}</span>`; };
-        thumb.appendChild(img);
-      });
-    }
-  } catch (e) { host.innerHTML = "<p class='note'>Could not load the latest receipt.</p>"; }
+  loadObjects();
 }
 document.getElementById("q").addEventListener("input", render);
-loadPantry().catch(e => { document.getElementById("err").innerHTML = `<div class="err">${e.message}</div>`; });
-loadReview();
+loadObjects().catch(e => { document.getElementById("err").innerHTML = `<div class="err">${esc(e.message)}</div>`; });
 </script>
 </body>
 </html>
