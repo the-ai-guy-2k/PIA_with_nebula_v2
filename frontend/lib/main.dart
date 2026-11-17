@@ -1,7 +1,7 @@
-// ignore: deprecated_member_use
 // Flutter 3.50 deprecated package:flutter/material.dart in favour of
 // package:material_ui — the app still builds on it, so the import stays
 // until the migration is Tee-approved work of its own.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'api.dart';
