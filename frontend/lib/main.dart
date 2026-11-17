@@ -3,8 +3,11 @@ import 'package:image_picker/image_picker.dart';
 import 'api.dart';
 
 /// Purchase Intelligence by TAIG ITS — Flutter UI, single user, no AI.
-/// 4 screens, in order: Snap, Review & Confirm, Pantry, Analytics.
+/// 4 screens, in order: Snap, Review, Pantry, Analytics.
 /// Backend: Droplet PIA API (see api.dart). Certs null for the demo.
+/// Receipts auto-confirm once read (Tee, Nov 16, 2026): the Review screen
+/// shows status, and Confirm below is only the fallback for receipts
+/// that held (totals did not reconcile).
 void main() => runApp(const PiaApp());
 
 class PiaApp extends StatelessWidget {
@@ -72,7 +75,7 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  String _msg = 'Snap a receipt. Nothing counts until you confirm it.';
+  String _msg = 'Snap a receipt. It lands in your pantry once it\'s read.';
   bool _busy = false;
 
   Future<void> _snap() async {
@@ -84,6 +87,11 @@ class _ScanScreenState extends State<ScanScreen> {
       final bytes = await file.readAsBytes();
       final intake = await widget.api.uploadReceipt(bytes, file.name);
       setState(() => _msg = 'Receipt preserved. Reading it…');
+      try {
+        await widget.api.queueForMuse(intake['evidence_id'] as String);
+      } catch (_) {
+        // Best-effort: the OCR read below still runs if queueing fails.
+      }
       final extraction = await widget.api.extract(intake['evidence_id'] as String);
       widget.onExtracted(extraction);
     } catch (e) {
@@ -126,21 +134,31 @@ class _ReviewScreenState extends State<ReviewScreen> {
   String _msg = '';
   final Map<String, TextEditingController> _edits = {};
   final Map<String, String> _thumbs = {};
+  Map<String, dynamic>? _extraction;
 
   @override
   void initState() {
     super.initState();
+    _extraction = widget.extraction;
     _loadThumbs();
   }
 
   /// The receipt display object Muse built (photos + grouping).
   /// The screen renders it verbatim; when Muse has not built it yet,
   /// the raw extraction lines show with plain initial placeholders.
+  /// Also refreshes the extraction: the Muse read may have
+  /// auto-confirmed it since the snap (Tee, Nov 16, 2026).
   Future<void> _loadThumbs() async {
     final ext = widget.extraction;
     if (ext == null) return;
     final evidenceId = ext['evidence_id'] as String?;
     if (evidenceId == null) return;
+    try {
+      final fresh = await widget.api.getExtraction(ext['extraction_id'] as String);
+      if (mounted) setState(() => _extraction = fresh);
+    } catch (_) {
+      // Keep the snap-time extraction if the refresh fails.
+    }
     final display = await widget.api.receiptDisplay(evidenceId);
     if (display == null || !mounted) return;
     final thumbs = <String, String>{};
@@ -194,15 +212,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ext = widget.extraction;
+    final ext = _extraction ?? widget.extraction;
     if (ext == null) {
       return const Center(child: Text('No receipt yet. Snap one on the Scan tab.'));
     }
+    final confirmed = ext['confirmation_state'] == 'confirmed';
     final lines = (ext['lines'] as List<dynamic>);
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Text('Review & Confirm — ${ext['merchant_normalized_candidate'] ?? ''}',
+      Text('Review — ${ext['merchant_normalized_candidate'] ?? ''}',
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-      const Text('Original receipt is kept separate. Nothing counts until you confirm.'),
+      Text(confirmed
+          ? 'Already in your pantry.'
+          : 'Not in your pantry yet — confirm below, or wait for the Muse read.'),
       if (ext['suggestions'] != null && (ext['suggestions'] as Map).isNotEmpty)
         const Card(child: ListTile(title: Text('Suggestions from your corrections are flagged, never auto-applied.'))),
       ...lines.map((l) {
@@ -224,7 +245,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
         );
       }),
       const SizedBox(height: 12),
-      ElevatedButton(onPressed: _confirm, child: const Text('Confirm purchase')),
+      if (confirmed)
+        Text('Purchase ${ext['purchase_id']}. Pantry updated.',
+            style: const TextStyle(fontWeight: FontWeight.bold))
+      else
+        ElevatedButton(onPressed: _confirm, child: const Text('Confirm purchase')),
       if (_msg.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_msg)),
     ]);
   }

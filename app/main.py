@@ -274,7 +274,7 @@ def create_app(
                 content={"status": "rejected", "reason": "The extraction could not be read."},
             )
         try:
-            record, audit = ingest_muse_extraction(settings, evidence_id, payload)
+            record, audit, auto_confirm = ingest_muse_extraction(settings, evidence_id, payload)
         except EvidenceNotFound:
             return _not_found()
         except MusePayloadError as exc:
@@ -284,11 +284,12 @@ def create_app(
                 content={"status": "rejected", "reason": str(exc)},
             )
         muse_ai_logger.info(
-            "muse-ai ingested evidence_id=%s extraction_id=%s lines=%s reconciled=%s",
+            "muse-ai ingested evidence_id=%s extraction_id=%s lines=%s reconciled=%s auto_confirm=%s",
             evidence_id,
             record.extraction_id,
             len(record.lines),
             audit.totals_reconciled,
+            auto_confirm["status"],
         )
         content = _reviewed_extraction(settings, record)
         content["muse_ai"] = {
@@ -297,6 +298,7 @@ def create_app(
             "total_mismatch": audit.total_mismatch,
             "lines_sum": audit.lines_sum,
         }
+        content["auto_confirm"] = auto_confirm
         return JSONResponse(status_code=200, content=content)
 
     # Display object (Tee, Nov 8, 2026): Muse builds ONE structured

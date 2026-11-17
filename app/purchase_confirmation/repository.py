@@ -127,6 +127,20 @@ def get_purchase_for_extraction(settings: Settings, extraction_id: str) -> Confi
         connection.close()
 
 
+def get_purchase_for_evidence(settings: Settings, evidence_id: str) -> ConfirmedPurchase | None:
+    """First purchase for a receipt, if any.
+
+    Extractions are replaced on re-ingest (new extraction id each time),
+    so per-extraction uniqueness alone cannot stop a re-ingest from
+    logging the same receipt twice. Auto-confirm checks this first.
+    """
+    connection = _connect(settings)
+    try:
+        return _get_purchase(connection, "evidence_id = ?", (evidence_id,))
+    finally:
+        connection.close()
+
+
 def new_purchase_id() -> str:
     return str(uuid.uuid4())
 

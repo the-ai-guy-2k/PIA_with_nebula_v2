@@ -4,11 +4,15 @@ Run inside the PIA container (or with PIA_DATA_DIR set):
 
   python -m app.muse_ai.cli list
   python -m app.muse_ai.cli show <evidence_id>
+  python -m app.muse_ai.cli events [n]
   python -m app.muse_ai.cli ingest <evidence_id> <extraction.json>
 
 `list` shows queued receipts waiting for Muse to read them.
-`ingest` validates a Muse extraction JSON and stores it as the receipt's
-current unconfirmed extraction. It never confirms a purchase.
+`events` shows the latest queue events (queued / done / held / failed).
+`ingest` validates a Muse extraction JSON and stores it. When it
+reconciles it auto-confirms (Tee, Nov 16, 2026 — Review & Confirm
+removed): purchase + memory + pantry, same validation as the manual
+confirm. A mismatch holds the receipt unconfirmed.
 """
 
 from __future__ import annotations
@@ -47,6 +51,19 @@ def main(argv: list[str]) -> int:
             return 1
         print(json.dumps(record.to_public_dict(), indent=2))
         return 0
+    if command == "events":
+        try:
+            limit = int(argv[1]) if len(argv) > 1 else 20
+        except ValueError:
+            print("usage: events [n]")
+            return 2
+        events = queue_mod.read_events(settings, limit=limit)
+        if not events:
+            print("no events yet")
+            return 0
+        for event in events:
+            print(f"{event['ts']}  {event['event']}  {event['evidence_id']}  {event.get('status') or ''}")
+        return 0
     if command == "ingest":
         if len(argv) != 3:
             print("usage: ingest <evidence_id> <extraction.json>")
@@ -58,7 +75,7 @@ def main(argv: list[str]) -> int:
             print(f"cannot read extraction file: {exc}")
             return 2
         try:
-            record, audit = ingest_muse_extraction(settings, evidence_id, payload)
+            record, audit, auto_confirm = ingest_muse_extraction(settings, evidence_id, payload)
         except EvidenceNotFound:
             print("evidence not found")
             return 1
@@ -68,6 +85,9 @@ def main(argv: list[str]) -> int:
         print(f"stored extraction {record.extraction_id} for {evidence_id}")
         print(f"lines={len(record.lines)} totals_reconciled={audit.totals_reconciled} "
               f"total_mismatch={audit.total_mismatch} lines_sum=${audit.lines_sum}")
+        print(f"auto_confirm={auto_confirm['status']}"
+              + (f" purchase={auto_confirm.get('purchase_id')}" if auto_confirm.get("purchase_id") else "")
+              + (f" reason={auto_confirm.get('reason')}" if auto_confirm.get("reason") else ""))
         return 0
     print(f"unknown command {command!r}")
     return 2

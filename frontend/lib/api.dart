@@ -27,6 +27,13 @@ class PiaApi {
     return _decode(resp);
   }
 
+  /// Queue a receipt for Muse to read (hood AI). Best-effort from the
+  /// Scan screen: the receipt still extracts by OCR if this fails.
+  Future<Map<String, dynamic>> queueForMuse(String evidenceId) async {
+    final resp = await http.post(Uri.parse('$baseUrl/api/receipts/$evidenceId/muse-ai'));
+    return _decode(resp);
+  }
+
   Future<Map<String, dynamic>> getExtraction(String extractionId) async {
     final resp = await http.get(Uri.parse('$baseUrl/api/extractions/$extractionId'));
     return _decode(resp);

@@ -102,7 +102,8 @@ def test_bad_money_is_rejected():
 def test_queue_ingest_review_flow(settings, client):
     evidence = _evidence(settings)
     queue_receipt(settings, evidence.evidence_id)
-    record, audit = ingest_muse_extraction(settings, evidence.evidence_id, GOOD)
+    record, audit, outcome = ingest_muse_extraction(settings, evidence.evidence_id, GOOD)
+    assert outcome["status"] == "held"  # mismatch never auto-confirms
     assert audit.total_mismatch is True  # lines sum 19.41 vs stated 160.38
     assert audit.lines_sum == "19.41"
 
@@ -138,7 +139,9 @@ def test_muse_ai_endpoints(settings, client):
     )
     assert good.status_code == 200
     assert good.json()["muse_ai"]["totals_reconciled"] is True
-    assert good.json()["confirmation_state"] == "unconfirmed"
+    # Reconciled Muse ingest auto-confirms (Tee, Nov 16, 2026).
+    assert good.json()["auto_confirm"]["status"] == "confirmed"
+    assert good.json()["confirmation_state"] == "confirmed"
 
     missing = client.post("/api/receipts/does-not-exist/muse-ai")
     assert missing.status_code == 404

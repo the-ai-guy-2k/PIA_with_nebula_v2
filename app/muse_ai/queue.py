@@ -14,7 +14,38 @@ from pathlib import Path
 from app.config import Settings
 from app.muse_ai.models import QueueRecord
 
-_STATUSES = {"queued", "processing", "done", "done_with_mismatch", "failed"}
+_STATUSES = {"queued", "processing", "done", "done_with_mismatch", "held", "failed"}
+
+
+def _events_path(settings: Settings) -> Path:
+    return _queue_dir(settings) / "events.jsonl"
+
+
+def append_event(settings: Settings, event: str, evidence_id: str, status: str | None = None) -> None:
+    """Append one timestamped event line to the queue events log.
+
+    Data only — the file is written by the backend itself and read by Tim
+    over SSH. It is never executed, and nothing outside the backend writes
+    to it, so no token or parser beyond JSON is involved.
+    """
+    _queue_dir(settings).mkdir(parents=True, exist_ok=True)
+    line = {"ts": _now(), "event": event, "evidence_id": evidence_id, "status": status}
+    with open(_events_path(settings), "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(line) + "\n")
+
+
+def read_events(settings: Settings, limit: int = 50) -> list[dict]:
+    """Latest events, oldest first. Empty when nothing was ever queued."""
+    path = _events_path(settings)
+    if not path.exists():
+        return []
+    events: list[dict] = []
+    for raw in path.read_text(encoding="utf-8").splitlines()[-limit:]:
+        try:
+            events.append(json.loads(raw))
+        except json.JSONDecodeError:
+            continue
+    return events
 
 
 def _queue_dir(settings: Settings) -> Path:
@@ -40,6 +71,7 @@ def queue_record(settings: Settings, evidence_id: str, ocr_text: str = "") -> Qu
         updated_at=_now(),
     )
     _write(settings, record)
+    append_event(settings, "receipt_queued", evidence_id, status="queued")
     return record
 
 
@@ -105,6 +137,7 @@ def set_status(
         updated_at=_now(),
     )
     _write(settings, record)
+    append_event(settings, "receipt_status", evidence_id, status=status)
     return record
 
 
